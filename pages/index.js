@@ -50,7 +50,7 @@ export default function Home({ posts }) {
         <h2 style={{ fontSize: '18px', margin: 0 }}>@{username}</h2>
       </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
         {posts.map((post) => (
           <div
             key={post.id}
