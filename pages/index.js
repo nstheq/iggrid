@@ -1,5 +1,3 @@
-import { useState } from 'react';
-
 export async function getServerSideProps() {
   try {
     const res = await fetch(
@@ -36,44 +34,14 @@ export async function getServerSideProps() {
       };
     });
 
-    return { props: { initialPosts: posts } };
+    return { props: { posts } };
   } catch (error) {
-    return { props: { initialPosts: [] } };
+    return { props: { posts: [] } };
   }
 }
 
-export default function Home({ initialPosts }) {
-  const [posts, setPosts] = useState(initialPosts || []);
-  const [draggedIdx, setDraggedIdx] = useState(null);
-
-  const handleDragStart = (index) => setDraggedIdx(index);
-  const handleDragOver = (e) => e.preventDefault();
-
-  const handleDrop = async (dropIdx) => {
-    if (draggedIdx === null || draggedIdx === dropIdx) return;
-
-    const updated = [...posts];
-    const [draggedItem] = updated.splice(draggedIdx, 1);
-    updated.splice(dropIdx, 0, draggedItem);
-
-    const reordered = updated.map((item, index) => ({
-      ...item,
-      order: index + 1,
-    }));
-
-    setPosts(reordered);
-    setDraggedIdx(null);
-
-    await fetch('/api/reorder', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        items: reordered.map((item) => ({ id: item.id, order: item.order })),
-      }),
-    });
-  };
-
-  const username = process.env.NEXT_PUBLIC_IG_USERNAME || 'yourbrand';
+export default function Home({ posts }) {
+  const username = process.env.NEXT_PUBLIC_IG_USERNAME || 'rusesocials';
 
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto', padding: '20px', fontFamily: 'sans-serif' }}>
@@ -83,18 +51,13 @@ export default function Home({ initialPosts }) {
       </header>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
-        {posts.map((post, index) => (
+        {posts.map((post) => (
           <div
             key={post.id}
-            draggable
-            onDragStart={() => handleDragStart(index)}
-            onDragOver={handleDragOver}
-            onDrop={() => handleDrop(index)}
             style={{
               position: 'relative',
               paddingTop: '100%',
               backgroundColor: '#f0f0f0',
-              cursor: 'grab',
             }}
           >
             {post.imageUrl ? (
