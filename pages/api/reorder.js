@@ -1,7 +1,3 @@
-import { Client } from '@notionhq/client';
-
-const notion = new Client({ auth: process.env.NOTION_TOKEN });
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   const { items } = req.body;
@@ -9,11 +5,18 @@ export default async function handler(req, res) {
   try {
     await Promise.all(
       items.map((item) =>
-        notion.pages.update({
-          page_id: item.id,
-          properties: {
-            Order: { number: item.order },
+        fetch(`https://api.notion.com/v1/pages/${item.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${process.env.NOTION_TOKEN}`,
+            'Notion-Version': '2022-06-28',
+            'Content-Type': 'application/json',
           },
+          body: JSON.stringify({
+            properties: {
+              Order: { number: item.order },
+            },
+          }),
         })
       )
     );
