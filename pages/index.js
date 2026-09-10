@@ -1,38 +1,52 @@
 import { useState } from 'react';
-import { Client } from '@notionhq/client';
 
 export async function getServerSideProps() {
-  const notion = new Client({ auth: process.env.NOTION_TOKEN });
-  const response = await notion.databases.query({
-    database_id: process.env.NOTION_DATABASE_ID,
-    sorts: [{ property: 'Order', direction: 'ascending' }],
-  });
+  try {
+    const res = await fetch(
+      `https://api.notion.com/v1/databases/${process.env.NOTION_DATABASE_ID}/query`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.NOTION_TOKEN}`,
+          'Notion-Version': '2022-06-28',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sorts: [{ property: 'Order', direction: 'ascending' }],
+        }),
+      }
+    );
 
-  const posts = response.results.map((page) => {
-    const props = page.properties;
-    const imageUrl =
-      props.Image?.files?.[0]?.file?.url ||
-      props.Image?.files?.[0]?.external?.url ||
-      props['Image URL']?.url ||
-      '';
+    const data = await res.json();
+    const results = data.results || [];
 
-    return {
-      id: page.id,
-      title: props.Name?.title?.[0]?.plain_text || 'Untitled',
-      order: props.Order?.number || 0,
-      imageUrl,
-    };
-  });
+    const posts = results.map((page) => {
+      const props = page.properties;
+      const imageUrl =
+        props.Image?.files?.[0]?.file?.url ||
+        props.Image?.files?.[0]?.external?.url ||
+        props['Image URL']?.url ||
+        '';
 
-  return { props: { initialPosts: posts } };
+      return {
+        id: page.id,
+        title: props.Name?.title?.[0]?.plain_text || 'Untitled',
+        order: props.Order?.number || 0,
+        imageUrl,
+      };
+    });
+
+    return { props: { initialPosts: posts } };
+  } catch (error) {
+    return { props: { initialPosts: [] } };
+  }
 }
 
 export default function Home({ initialPosts }) {
-  const [posts, setPosts] = useState(initialPosts);
+  const [posts, setPosts] = useState(initialPosts || []);
   const [draggedIdx, setDraggedIdx] = useState(null);
 
   const handleDragStart = (index) => setDraggedIdx(index);
-
   const handleDragOver = (e) => e.preventDefault();
 
   const handleDrop = async (dropIdx) => {
