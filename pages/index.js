@@ -1,88 +1,109 @@
-import { getGridPosts } from "../lib/notion";
+import { useState } from 'react';
+import { Client } from '@notionhq/client';
 
 export async function getServerSideProps() {
-  try {
-    const posts = await getGridPosts();
-    return { props: { posts, error: null } };
-  } catch (err) {
-    return { props: { posts: [], error: err.message } };
-  }
+  const notion = new Client({ auth: process.env.NOTION_TOKEN });
+  const response = await notion.databases.query({
+    database_id: process.env.NOTION_DATABASE_ID,
+    sorts: [{ property: 'Order', direction: 'ascending' }],
+  });
+
+  const posts = response.results.map((page) => {
+    const props = page.properties;
+    const imageUrl =
+      props.Image?.files?.[0]?.file?.url ||
+      props.Image?.files?.[0]?.external?.url ||
+      props['Image URL']?.url ||
+      '';
+
+    return {
+      id: page.id,
+      title: props.Name?.title?.[0]?.plain_text || 'Untitled',
+      order: props.Order?.number || 0,
+      imageUrl,
+    };
+  });
+
+  return { props: { initialPosts: posts } };
 }
 
-export default function Grid({ posts, error }) {
-  const username = process.env.NEXT_PUBLIC_IG_USERNAME || "@yourbrand";
+export default function Home({ initialPosts }) {
+  const [posts, setPosts] = useState(initialPosts);
+  const [draggedIdx, setDraggedIdx] = useState(null);
 
-  if (error) {
-    return (
-      <div style={styles.page}>
-        <p style={{ color: "#c0392b", fontFamily: "sans-serif" }}>
-          Couldn't load the grid: {error}
-        </p>
-      </div>
-    );
-  }
+  const handleDragStart = (index) => setDraggedIdx(index);
+
+  const handleDragOver = (e) => e.preventDefault();
+
+  const handleDrop = async (dropIdx) => {
+    if (draggedIdx === null || draggedIdx === dropIdx) return;
+
+    const updated = [...posts];
+    const [draggedItem] = updated.splice(draggedIdx, 1);
+    updated.splice(dropIdx, 0, draggedItem);
+
+    const reordered = updated.map((item, index) => ({
+      ...item,
+      order: index + 1,
+    }));
+
+    setPosts(reordered);
+    setDraggedIdx(null);
+
+    await fetch('/api/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items: reordered.map((item) => ({ id: item.id, order: item.order })),
+      }),
+    });
+  };
+
+  const username = process.env.NEXT_PUBLIC_IG_USERNAME || 'yourbrand';
 
   return (
-    <div style={styles.page}>
-      <div style={styles.header}>
-        <div style={styles.avatar} />
-        <span style={styles.username}>{username}</span>
-      </div>
+    <div style={{ maxWidth: '600px', margin: '0 auto', padding: '20px', fontFamily: 'sans-serif' }}>
+      <header style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+        <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#ccc' }} />
+        <h2 style={{ fontSize: '18px', margin: 0 }}>@{username}</h2>
+      </header>
 
-      {posts.length === 0 ? (
-        <p style={{ fontFamily: "sans-serif", color: "#888", padding: "24px" }}>
-          No posts yet — add rows with an image to your Notion database.
-        </p>
-      ) : (
-        <div style={styles.grid}>
-          {posts.map((post) => (
-            <div key={post.id} style={styles.tile}>
-              <img src={post.image} alt={post.caption} style={styles.tileImg} />
-            </div>
-          ))}
-        </div>
-      )}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
+        {posts.map((post, index) => (
+          <div
+            key={post.id}
+            draggable
+            onDragStart={() => handleDragStart(index)}
+            onDragOver={handleDragOver}
+            onDrop={() => handleDrop(index)}
+            style={{
+              position: 'relative',
+              paddingTop: '100%',
+              backgroundColor: '#f0f0f0',
+              cursor: 'grab',
+            }}
+          >
+            {post.imageUrl ? (
+              <img
+                src={post.imageUrl}
+                alt={post.title}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                }}
+              />
+            ) : (
+              <div style={{ position: 'absolute', top: '40%', left: '10%', fontSize: '12px' }}>
+                {post.title}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
-
-const styles = {
-  page: {
-    maxWidth: 470,
-    margin: "0 auto",
-    background: "#fff",
-    fontFamily: "-apple-system, sans-serif",
-  },
-  header: {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    padding: "14px 12px",
-    borderBottom: "1px solid #eee",
-  },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: "50%",
-    background: "#ddd",
-  },
-  username: { fontWeight: 600, fontSize: 14 },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(3, 1fr)",
-    gap: 2,
-  },
-  tile: {
-    position: "relative",
-    width: "100%",
-    aspectRatio: "1 / 1",
-    overflow: "hidden",
-    background: "#f2f2f2",
-  },
-  tileImg: {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-    display: "block",
-  },
-};
