@@ -12,7 +12,7 @@ export async function getServerSideProps() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          sorts: [{ property: 'Post Scheduled Date', direction: 'ascending' }],
+          sorts: [{ property: 'Post Scheduled Date', direction: 'descending' }],
         }),
       }
     );
