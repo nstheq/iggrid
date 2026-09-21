@@ -20,7 +20,16 @@ export async function getServerSideProps() {
     const data = await res.json();
     const results = data.results || [];
 
-    const posts = results.map((page) => {
+    const posts = results
+  .filter((page) => {
+    const type =
+      page.properties['Content Type']?.select?.name ||
+      page.properties['Content Type']?.status?.name ||
+      page.properties['Content Type']?.multi_select?.[0]?.name ||
+      '';
+    return type.toLowerCase() !== 'story';
+  })
+  .map((page) => {
       const props = page.properties;
       
       // Extract uploaded files from Files & Media property
