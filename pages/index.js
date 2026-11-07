@@ -1,5 +1,7 @@
 import { useState } from 'react';
 
+const ALLOWED_STATUSES = ['scheduled', 'posted'];
+
 export async function getServerSideProps() {
   try {
     const res = await fetch(
@@ -22,6 +24,21 @@ export async function getServerSideProps() {
 
     const posts = results
       .filter((page) => {
+
+            const posts = results
+      .filter((page) => {
+        const statusProp = page.properties['Status'];
+        const status = (statusProp?.status?.name || statusProp?.select?.name || '').toLowerCase();
+        if (!ALLOWED_STATUSES.includes(status)) return false;
+
+        const type =
+          page.properties['Content Type']?.select?.name ||
+          page.properties['Content Type']?.status?.name ||
+          page.properties['Content Type']?.multi_select?.[0]?.name ||
+          '';
+        return type.toLowerCase() !== 'story';
+      })
+        
         const type =
           page.properties['Content Type']?.select?.name ||
           page.properties['Content Type']?.status?.name ||
