@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 // Only posts with one of these Status values show in the preview.
 // Draft is left out on purpose, so drafts stay hidden.
-const ALLOWED_STATUSES = ['scheduled', 'posted'];
+const ALLOWED_STATUSES = ['scheduled', 'posted', 'awaiting approval'];
 
 export async function getServerSideProps() {
   try {
