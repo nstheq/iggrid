@@ -523,8 +523,8 @@ function ReelView({ post, profile }) {
         </a>
       )}
 
-      {/* Embedded players need clicks, so the overlay lets clicks pass through */}
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: embedded ? 'none' : 'auto' }}>
+      {/* Instagram style overlay. Clicks pass through it to the player and the Watch reel button */}
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: embedded ? 0.9 : 1 }}>
       <div style={{ position: 'absolute', inset: 'auto 0 0 0', height: '45%', background: 'linear-gradient(transparent, rgba(0,0,0,0.75))' }} />
       <div style={{ position: 'absolute', top: '16px', left: '16px', fontWeight: 600, fontSize: '18px' }}>Reels</div>
 
@@ -549,6 +549,7 @@ function ReelView({ post, profile }) {
           <MusicIcon size={14} />
           <span>{profile.username} · {post.audio || 'Original audio'}</span>
         </div>
+      </div>
       </div>
     </div>
   );
