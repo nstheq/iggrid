@@ -8,6 +8,49 @@ const ALLOWED_STATUSES = ['scheduled', 'posted', 'awaiting approval'];
 // different name, add it to the list. The first one that exists is used.
 const CAPTION_COLUMNS = ['Caption', 'Copy', 'Post Caption', 'Description'];
 const AUDIO_COLUMNS = ['Audio', 'Sound', 'Song'];
+// Reel cover: a Files & media column. This is what shows on the grid.
+const COVER_COLUMNS = ['Cover', 'Reel Cover', 'Thumbnail'];
+// Reel link: a URL (or text) column with a link to the video, for example
+// a Google Drive or Dropbox share link, or a direct .mp4 link.
+const VIDEO_LINK_COLUMNS = ['Reel Link', 'Video Link', 'Video URL', 'Video'];
+
+const pickFiles = (props, names) => {
+  for (const name of names) {
+    const files = props[name]?.files || [];
+    const urls = files.map((f) => f?.file?.url || f?.external?.url || '').filter(Boolean);
+    if (urls.length) return urls;
+  }
+  return [];
+};
+
+const pickUrl = (props, names) => {
+  for (const name of names) {
+    const prop = props[name];
+    const url = prop?.url || getText(prop) || prop?.files?.[0]?.external?.url || prop?.files?.[0]?.file?.url || '';
+    if (url) return url.trim();
+  }
+  return '';
+};
+
+// Turns a share link into something the preview can play.
+// Returns { kind: 'video' | 'embed' | 'link', url }
+const playableFromLink = (link) => {
+  if (!link) return null;
+  if (isVideoUrl(link)) return { kind: 'video', url: link };
+  // Google Drive: https://drive.google.com/file/d/FILE_ID/view
+  const drive = link.match(/drive\.google\.com\/(?:file\/d\/|open\?id=)([\w-]+)/);
+  if (drive) return { kind: 'embed', url: `https://drive.google.com/file/d/${drive[1]}/preview` };
+  // Dropbox: switch the share link to a direct file link
+  if (/dropbox\.com/.test(link)) {
+    const direct = link.replace('www.dropbox.com', 'dl.dropboxusercontent.com').replace(/[?&]dl=0/, '');
+    return { kind: 'video', url: direct };
+  }
+  // Canva: a "view" link can be embedded
+  const canva = link.match(/canva\.com\/design\/([\w-]+)\/([\w-]+)/);
+  if (canva) return { kind: 'embed', url: `https://www.canva.com/design/${canva[1]}/${canva[2]}/view?embed` };
+  // Anything else opens in a new tab
+  return { kind: 'link', url: link };
+};
 
 // Reads the text out of a Notion text or title property
 const getText = (prop) => {
@@ -86,9 +129,13 @@ export async function getServerSideProps() {
         if (!media.length && props['Image URL']?.url) {
           media.push({ url: props['Image URL'].url, video: isVideoUrl(props['Image URL'].url) });
         }
-        // Grid thumbnail: first image, so a reel with a cover image shows the cover
+        // Grid thumbnail: the Cover column if it has a file, otherwise the first image
+        const cover = pickFiles(props, COVER_COLUMNS)[0] || '';
         const firstImage = media.find((m) => !m.video);
-        const imageUrl = firstImage?.url || '';
+        const imageUrl = cover || firstImage?.url || '';
+
+        // Reel video sent as a link instead of an upload
+        const videoLink = pickUrl(props, VIDEO_LINK_COLUMNS);
 
         // Determine if carousel
         const contentType = props['Content Type']?.select?.name || 'Post';
@@ -103,6 +150,7 @@ export async function getServerSideProps() {
           isCarousel,
           imageUrl,
           media,
+          videoLink,
           caption: pickText(props, CAPTION_COLUMNS),
           audio: pickText(props, AUDIO_COLUMNS),
           status: statusProp?.status?.name || statusProp?.select?.name || '',
@@ -416,15 +464,67 @@ function FeedView({ post, profile, slide, setSlide, trackRef }) {
 
 // What a reel looks like in the Reels viewer
 function ReelView({ post, profile }) {
-  const video = post.media.find((m) => m.video);
-  const item = video || post.media[0];
+  // Which video to play, in order: an uploaded video file, then the Reel Link,
+  // then fall back to the cover or first image.
+  const uploaded = post.media.find((m) => m.video);
+  const linked = uploaded ? null : playableFromLink(post.videoLink);
+  const image = post.imageUrl ? { url: post.imageUrl, video: false } : post.media[0];
   const firstLine = (post.caption || '').split('\n')[0];
+
+  let player;
+  if (uploaded) {
+    player = <Media item={uploaded} title={post.title} cover={post.imageUrl} />;
+  } else if (linked?.kind === 'video') {
+    player = <Media item={{ url: linked.url, video: true }} title={post.title} cover={post.imageUrl} />;
+  } else if (linked?.kind === 'embed') {
+    player = (
+      <iframe
+        src={linked.url}
+        title={post.title}
+        allow="autoplay; fullscreen"
+        allowFullScreen
+        style={{ width: '100%', height: '100%', border: 0, display: 'block' }}
+      />
+    );
+  } else if (image) {
+    player = <Media item={image} title={post.title} />;
+  } else {
+    player = <Placeholder title={post.title} dark />;
+  }
+  const embedded = linked?.kind === 'embed';
 
   return (
     <div style={{ position: 'relative', flex: 1, background: '#000', color: '#fff', overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', inset: 0 }}>
-        {item ? <Media item={item} title={post.title} cover={post.imageUrl} /> : <Placeholder title={post.title} dark />}
-      </div>
+      <div style={{ position: 'absolute', inset: 0 }}>{player}</div>
+
+      {/* A link we can't play inside the page gets a button to open it */}
+      {linked?.kind === 'link' && (
+        <a
+          href={linked.url}
+          target="_blank"
+          rel="noreferrer"
+          style={{
+            position: 'absolute',
+            top: '45%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            background: 'rgba(0,0,0,0.6)',
+            color: '#fff',
+            padding: '12px 20px',
+            borderRadius: '99px',
+            fontWeight: 600,
+            textDecoration: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <ReelIcon size={18} /> Watch reel
+        </a>
+      )}
+
+      {/* Embedded players need clicks, so the overlay lets clicks pass through */}
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: embedded ? 'none' : 'auto' }}>
       <div style={{ position: 'absolute', inset: 'auto 0 0 0', height: '45%', background: 'linear-gradient(transparent, rgba(0,0,0,0.75))' }} />
       <div style={{ position: 'absolute', top: '16px', left: '16px', fontWeight: 600, fontSize: '18px' }}>Reels</div>
 
